@@ -1,0 +1,4 @@
+{
+    "chat.agent.enabled": true,
+    "inlineChat.fixDiagnostics": true
+}
