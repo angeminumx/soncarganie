@@ -103,6 +103,7 @@ for i, t in enumerate(simulation_times):
                 # NOTE IRL Frequency isnt going to be perfect got to tune binning so that physical limits on sound production dont cause it to be spread over multiple max freq (EX 399, 400, 401) or however the bandwidth IRL works out
                 detections.append([freqs[risingEdges[m]], m, t])
 print(detections)
+# TODO Corelate mics to get distance of point, Also Need to have pulse(freq) be within the sim part so we can use the pulse of the system to help filter noise on the recivers
 
 colors = ["red", "green", "yellow", "purple", "blue", "orange"]
 
