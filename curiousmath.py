@@ -65,7 +65,7 @@ sampleWindow = np.zeros((NUM_MICS, SamplesPerWindow))
 
 freqs = np.fft.rfftfreq(SamplesPerWindow, d=(1/SAMPLE_RATE_ADC)) # Get bins; Samples, timestep
 
-frequenciesVsTime = np.zeros((MIC_SAMPLES, NUM_MICS)) # Predom frequency of each mic per timestep
+frequenciesVsTime = np.zeros((MIC_SAMPLES, NUM_MICS, len(freqs))) # Spectrum of each mic per timestep
 
 # Detection Loop (What runs on the hardware)
 for i, t in enumerate(simulation_times):
@@ -76,35 +76,56 @@ for i, t in enumerate(simulation_times):
 
     freqMag = np.fft.rfft(sampleWindow, axis=1)
 
-    frequenciesVsTime[i] = freqs[np.argmax(freqMag, axis=1)]
+    frequenciesVsTime[i] = freqMag
 
     # TODO Frequency shift time detection
 
-# frequenciesVsTime = np.where(frequenciesVsTime > MAXIMUMMEASUREABLEFREQUENCY, 0, frequenciesVsTime)
 
 colors = ["red", "green", "yellow", "purple", "blue", "orange"]
 
 figPulse = plt.figure("Pulse")
 sub = figPulse.add_subplot(2, 1, 1)
 sub.plot(pulse_times, pulse_signal)
-sub = figPulse.add_subplot(2, 1, 2)
+sub.set_xlabel("Pulse Time")
+sub.set_ylabel("Amplitude")
+sub.set_title("Pulse Signal")
 
-freqs = np.fft.fftfreq(PULSE_SAMPLES, d=(1/SAMPLE_RATE_ADC)) # Get bins; Samples, timestep
+sub = figPulse.add_subplot(2, 1, 2)
+freqsPulse = np.fft.fftfreq(PULSE_SAMPLES, d=(1/SAMPLE_RATE_ADC)) # Get bins; Samples, timestep
 mags = np.fft.fft(pulse_signal)
-sub.plot(freqs, mags)
+sub.plot(freqsPulse, mags)
+sub.set_xlabel("Frequency")
+sub.set_ylabel("Amplitude")
+sub.set_title("FFT of Pulse")
+
+figPulse.tight_layout()
 
 figRecSignals = plt.figure("Recieved")
 sub = figRecSignals.add_subplot(2, 1, 1)
 for i, s in enumerate(samples):
     sub.plot(simulation_times, s, color=colors[i])
+sub.set_title("Signal Ampltidude vs Time of Microphones")
+sub.set_xlabel("Simulation Time")
+sub.set_ylabel("Amplitude")
 
 sub = figRecSignals.add_subplot(2, 1, 2)
 for i in range(NUM_MICS):
-    sub.plot(simulation_times, frequenciesVsTime[:, i], color=colors[i])
+    sub.plot(simulation_times, freqs[np.argmax(frequenciesVsTime[:, i], axis=1)], color=colors[i])
+sub.set_xlabel("Simulation Time")
+sub.set_ylabel("Frequency")
+sub.set_title("Peak Frequency vs Time of Microphones")
+figRecSignals.tight_layout()
+
 
 figFTMic1 = plt.figure("FT of Mic 1 vs Time")
 sub = figFTMic1.add_subplot(1, 1, 1, projection='3d')
-# sub.plot_surface(simulation_times, Y, Z)
 
+mask = (freqs >= 0) & (freqs <= 1000)
+T, F = np.meshgrid(simulation_times ,freqs[mask], indexing='ij')
+
+sub.plot_surface(T, F, frequenciesVsTime[:, 1, mask])
+# sub.set_ylim(0, 1000)
+
+figFTMic1.tight_layout()
 
 plt.show()
