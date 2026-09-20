@@ -17,6 +17,7 @@ PULSE_LENGTH = 0.5 # s
 PULSE_SAMPLES = int(SAMPLE_RATE_ADC*PULSE_LENGTH)
 pulse_times = np.linspace(0, PULSE_LENGTH, num=PULSE_SAMPLES)
 
+# TODO PULSE FREQUENCY MUST GRADUALLY CHANGE ELSE SPECTRAL SPLATTER OCCURS
 pulse_signal = np.zeros(PULSE_SAMPLES)
 pulse_signal[0:PULSE_SAMPLES//2] = np.sin(2*np.pi*400*pulse_times[0:PULSE_SAMPLES//2])
 pulse_signal[PULSE_SAMPLES//2:] = np.sin(2*np.pi*800*pulse_times[PULSE_SAMPLES//2:])
@@ -40,7 +41,7 @@ class Mic:
         results[sampleStart:sampleStart+length] = pulse_signal[0:length]
 
         # Noise
-        # results = results + np.random.normal(0, 0.01, MIC_SAMPLES) # TODO Noise intolerance
+        results = results + np.random.normal(0, 0.01, MIC_SAMPLES) # TODO Noise intolerance
 
         return results
 
@@ -61,11 +62,13 @@ LOWESTMEASURABLEFREQUENCY = 200 # Sets frame window
 SamplesPerWindow = int(np.ceil(5 * SAMPLE_RATE_ADC / LOWESTMEASURABLEFREQUENCY)) # 5 cycles of lowest frequency set max number of samples needed for detection
 SampleWindowPeriod = SamplesPerWindow/SAMPLE_RATE_ADC # NOTE: This also determines the minimum transmission pulse length
 
+
 sampleWindow = np.zeros((NUM_MICS, SamplesPerWindow))
 
 freqs = np.fft.rfftfreq(SamplesPerWindow, d=(1/SAMPLE_RATE_ADC)) # Get bins; Samples, timestep
 
 frequenciesVsTime = np.zeros((MIC_SAMPLES, NUM_MICS, len(freqs))) # Spectrum of each mic per timestep
+detectedPeakFrequenciesVsTime = np.zeros((MIC_SAMPLES, NUM_MICS)) # Peak Frequency (#NOTE IRL may need to look specifcally at broadcast frequencies (discrete bandpass) to ensure interference)
 
 # Detection Loop (What runs on the hardware)
 for i, t in enumerate(simulation_times):
@@ -75,10 +78,11 @@ for i, t in enumerate(simulation_times):
         sampleWindow[j, -1] = sampleArr[i]
 
     freqMag = np.fft.rfft(sampleWindow, axis=1)
+    frequenciesVsTime[i] = data = 20*np.log10(np.abs(freqMag) / SamplesPerWindow)
+    noise = np.median(data, axis=1).reshape((data.shape[0],1))
+    SNR = data - noise
 
-    frequenciesVsTime[i] = freqMag
 
-    # TODO Frequency shift time detection
 
 
 colors = ["red", "green", "yellow", "purple", "blue", "orange"]
@@ -101,19 +105,40 @@ sub.set_title("FFT of Pulse")
 figPulse.tight_layout()
 
 figRecSignals = plt.figure("Recieved")
-sub = figRecSignals.add_subplot(2, 1, 1)
+sub = figRecSignals.add_subplot(3, 1, 1)
 for i, s in enumerate(samples):
     sub.plot(simulation_times, s, color=colors[i])
 sub.set_title("Signal Ampltidude vs Time of Microphones")
 sub.set_xlabel("Simulation Time")
 sub.set_ylabel("Amplitude")
 
-sub = figRecSignals.add_subplot(2, 1, 2)
+sub = figRecSignals.add_subplot(3, 1, 2)
 for i in range(NUM_MICS):
-    sub.plot(simulation_times, freqs[np.argmax(frequenciesVsTime[:, i], axis=1)], color=colors[i])
+    noise = np.median(frequenciesVsTime[:, i], axis=1).reshape((frequenciesVsTime[:, i].shape[0],1))
+    SNR = frequenciesVsTime[:, i]-noise 
+    data = np.where(SNR > 25, frequenciesVsTime[:, i], 0) # NOTE There are some peaks caused by frequency games around the 20dB
+    data = freqs[np.argmax(data, axis=1)]
+
+
+    sub.plot(simulation_times, data, color=colors[i])
+
 sub.set_xlabel("Simulation Time")
 sub.set_ylabel("Frequency")
 sub.set_title("Peak Frequency vs Time of Microphones")
+
+sub = figRecSignals.add_subplot(3, 1, 3)
+for i in range(NUM_MICS):
+    peak = np.max(frequenciesVsTime[:, i], axis=1)
+    noise = np.median(frequenciesVsTime[:, i], axis=1)
+
+    ratio = peak - noise
+
+    sub.plot(simulation_times, ratio, color=colors[i])
+
+sub.set_xlabel("Simulation Time")
+sub.set_ylabel("Peak Ratio (dB)")
+sub.set_title("Peak Ratio of Mics vs Time")
+
 figRecSignals.tight_layout()
 
 
@@ -123,7 +148,8 @@ sub = figFTMic1.add_subplot(1, 1, 1, projection='3d')
 mask = (freqs >= 0) & (freqs <= 1000)
 T, F = np.meshgrid(simulation_times ,freqs[mask], indexing='ij')
 
-sub.plot_surface(T, F, frequenciesVsTime[:, 1, mask])
+noise = np.median(frequenciesVsTime[:, 1, mask], axis=1).reshape((frequenciesVsTime[:, 1, mask].shape[0],1))
+sub.plot_surface(T, F, frequenciesVsTime[:, 1, mask]-noise)
 # sub.set_ylim(0, 1000)
 
 figFTMic1.tight_layout()
