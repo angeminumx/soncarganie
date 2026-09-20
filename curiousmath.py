@@ -60,20 +60,22 @@ samples = [m.sampleList() for m in micList]
 # fMax = fS/2; deltaF (Resolution) = fs/N = 1/T
 MAXIMUMMEASUREABLEFREQUENCY = SAMPLE_RATE_ADC / 2 # Nyquilst criteria
 LOWESTMEASURABLEFREQUENCY = 200 # Sets frame window
+
+# NOTE SNRTHRESHOLD has to be high enough to avoid multiple detections of the same pulse frequencies at steady state but also low enoguh so the flux of the peaks are causing more themselfs
 SNRTHRESHOLD = 56 # dB
 
-SamplesPerWindow = int(np.ceil(5 * SAMPLE_RATE_ADC / LOWESTMEASURABLEFREQUENCY)) # 5 cycles of lowest frequency set max number of samples needed for detection
-SampleWindowPeriod = SamplesPerWindow/SAMPLE_RATE_ADC # NOTE: This also determines the minimum transmission pulse length
+SAMPLESPERWINDOW = int(np.ceil(5 * SAMPLE_RATE_ADC / LOWESTMEASURABLEFREQUENCY)) # 5 cycles of lowest frequency set max number of samples needed for detection
+SAMPLEWINOWPERIOD = SAMPLESPERWINDOW/SAMPLE_RATE_ADC # NOTE: This also determines the minimum transmission pulse length
 
 
-sampleWindow = np.zeros((NUM_MICS, SamplesPerWindow))
+sampleWindow = np.zeros((NUM_MICS, SAMPLESPERWINDOW))
 
-freqs = np.fft.rfftfreq(SamplesPerWindow, d=(1/SAMPLE_RATE_ADC)) # Get bins; Samples, timestep
+FREQS = np.fft.rfftfreq(SAMPLESPERWINDOW, d=(1/SAMPLE_RATE_ADC)) # Get bins; Samples, timestep
 
-frequenciesVsTime = np.zeros((MIC_SAMPLES, NUM_MICS, len(freqs))) # Spectrum of each mic per timestep
-detectedFrequenciesVsTimeBinary = np.zeros((MIC_SAMPLES, NUM_MICS, len(freqs))) # Peak Frequency (#NOTE IRL may need to look specifcally at broadcast frequencies (discrete bandpass) to ensure interference)
-detectedFrequenciesVsTimeSNR = np.zeros((MIC_SAMPLES, NUM_MICS, len(freqs)))
-detections = []
+frequenciesVsTime = np.zeros((MIC_SAMPLES, NUM_MICS, len(FREQS))) # Spectrum of each mic per timestep
+detectedFrequenciesVsTimeBinary = np.zeros((MIC_SAMPLES, NUM_MICS, len(FREQS))) # Peak Frequency (#NOTE IRL may need to look specifcally at broadcast frequencies (discrete bandpass) to ensure interference)
+detectedFrequenciesVsTimeSNR = np.zeros((MIC_SAMPLES, NUM_MICS, len(FREQS)))
+detections = [] #FreqIndex, MicID, TimeOfRisingEdge
 
 # Detection Loop (What runs on the hardware)
 for i, t in enumerate(simulation_times):
@@ -83,12 +85,12 @@ for i, t in enumerate(simulation_times):
         sampleWindow[j, -1] = sampleArr[i]
 
     freqMag = np.fft.rfft(sampleWindow, axis=1)
-    frequenciesVsTime[i] = data = 20*np.log10(np.maximum(np.abs(freqMag), 1e-12) / SamplesPerWindow)
+    frequenciesVsTime[i] = data = 20*np.log10(np.maximum(np.abs(freqMag), 1e-12) / SAMPLESPERWINDOW)
     noise = np.median(data, axis=1).reshape((data.shape[0],1))
 
     SNR = data - noise
     detectedFrequenciesVsTimeBinary[i] = SNR > SNRTHRESHOLD # TRUE/FALSE values for every frequency if its present or not
-    detectedFrequenciesVsTimeSNR[i] = np.where(SNR > SNRTHRESHOLD, SNR, 0)
+    detectedFrequenciesVsTimeSNR[i] = np.where(SNR > SNRTHRESHOLD, SNR, 0) 
 
     # TODO Freq arrival times
     # NOTE IRL Other sources of sound could produce the same freq thus multiple pulses at different frequencies and caluclated multipaths must be overlayed
@@ -98,10 +100,11 @@ for i, t in enumerate(simulation_times):
     if i > 0:
         risingEdges = np.logical_and(np.logical_xor(detectedFrequenciesVsTimeBinary[i], detectedFrequenciesVsTimeBinary[i-1]), detectedFrequenciesVsTimeBinary[i])
         for m in range(NUM_MICS):
-            if(len(freqs[risingEdges[m]]) > 0):
-                # NOTE SNRTHRESHOLD has to be high enough to avoid multiple detections of the same pulse frequencies at steady state but also low enoguh so the flux of the peaks are causing more themselfs
+            if(len(FREQS[risingEdges[m]]) > 0):
+                for fi, fmask in enumerate(risingEdges[m]):
+                    if fmask:
+                        detections.append([fi, m, t])
                 # NOTE IRL Frequency isnt going to be perfect got to tune binning so that physical limits on sound production dont cause it to be spread over multiple max freq (EX 399, 400, 401) or however the bandwidth IRL works out
-                detections.append([freqs[risingEdges[m]], m, t])
 print(detections)
 # TODO Corelate mics to get distance of point, Also Need to have pulse(freq) be within the sim part so we can use the pulse of the system to help filter noise on the recivers
 
@@ -135,7 +138,7 @@ sub.set_ylabel("Amplitude")
 sub = figRecSignals.add_subplot(3, 1, 2)
 for i in range(NUM_MICS):
     data = detectedFrequenciesVsTimeSNR[:, i]
-    data = freqs[np.argmax(data, axis=1)]
+    data = FREQS[np.argmax(data, axis=1)]
 
 
     sub.plot(simulation_times, data, color=colors[i])
@@ -158,8 +161,8 @@ figRecSignals.tight_layout()
 figFTMic1 = plt.figure("FT of Mic 1 vs Time")
 sub = figFTMic1.add_subplot(1, 1, 1, projection='3d')
 
-mask = (freqs >= 0) & (freqs <= 1000)
-T, F = np.meshgrid(simulation_times ,freqs[mask], indexing='ij')
+mask = (FREQS >= 0) & (FREQS <= 1000)
+T, F = np.meshgrid(simulation_times ,FREQS[mask], indexing='ij')
 sub.plot_surface(T, F, frequenciesVsTime[:, 1, mask])
 
 figFTMic1.tight_layout()
@@ -168,7 +171,7 @@ figDetMic1 = plt.figure("Feq Detection of Mic 1 vs Time")
 sub = figDetMic1.add_subplot(1, 1, 1, projection='3d')
 
 
-T, F = np.meshgrid(simulation_times, freqs, indexing='ij')
+T, F = np.meshgrid(simulation_times, FREQS, indexing='ij')
 sub.plot_surface(T, F, detectedFrequenciesVsTimeBinary[:, 1])
 
 figDetMic1.tight_layout()
