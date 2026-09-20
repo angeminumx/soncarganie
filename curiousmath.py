@@ -73,6 +73,7 @@ freqs = np.fft.rfftfreq(SamplesPerWindow, d=(1/SAMPLE_RATE_ADC)) # Get bins; Sam
 frequenciesVsTime = np.zeros((MIC_SAMPLES, NUM_MICS, len(freqs))) # Spectrum of each mic per timestep
 detectedFrequenciesVsTimeBinary = np.zeros((MIC_SAMPLES, NUM_MICS, len(freqs))) # Peak Frequency (#NOTE IRL may need to look specifcally at broadcast frequencies (discrete bandpass) to ensure interference)
 detectedFrequenciesVsTimeSNR = np.zeros((MIC_SAMPLES, NUM_MICS, len(freqs)))
+detections = []
 
 # Detection Loop (What runs on the hardware)
 for i, t in enumerate(simulation_times):
@@ -92,13 +93,16 @@ for i, t in enumerate(simulation_times):
     # TODO Freq arrival times
     # NOTE IRL Other sources of sound could produce the same freq thus multiple pulses at different frequencies and caluclated multipaths must be overlayed
     # A scatterplot of distance infomation should result in points being aggregated onto real obstacles; Filtering can occur at this level to remove random external sources
+    # NOTE For futrue filtering make sure "counts" of detection are aligned, and make sure they strictly arrive after the pulse is sent, and the count right before the pulse is sent is reset so they all start from the same detection baseline; multiple counts after a pulse is indictive of either noise or multipathing
+    
     if i > 0:
         risingEdges = np.logical_and(np.logical_xor(detectedFrequenciesVsTimeBinary[i], detectedFrequenciesVsTimeBinary[i-1]), detectedFrequenciesVsTimeBinary[i])
-        if(len(freqs[risingEdges[1]]) > 0):
-            # NOTE SNRTHRESHOLD has to be high enough to avoid multiple detections of the same pulse frequencies at steady state but also low enoguh so the flux of the peaks are causing more themselfs
-            # NOTE IRL Frequency isnt going to be perfect got to tune binning so that physical limits on sound production dont cause it to be spread over multiple max freq (EX 399, 400, 401) or however the bandwidth IRL works out
-            print(t, freqs[risingEdges[1]])
-            # TODO Got to save first detection time in a datastructure os it can be correlated across multiple mics and future multipath detections can be caught
+        for m in range(NUM_MICS):
+            if(len(freqs[risingEdges[m]]) > 0):
+                # NOTE SNRTHRESHOLD has to be high enough to avoid multiple detections of the same pulse frequencies at steady state but also low enoguh so the flux of the peaks are causing more themselfs
+                # NOTE IRL Frequency isnt going to be perfect got to tune binning so that physical limits on sound production dont cause it to be spread over multiple max freq (EX 399, 400, 401) or however the bandwidth IRL works out
+                detections.append([freqs[risingEdges[m]], m, t])
+print(detections)
 
 colors = ["red", "green", "yellow", "purple", "blue", "orange"]
 
