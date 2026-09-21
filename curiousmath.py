@@ -92,7 +92,6 @@ for i, t in enumerate(simulation_times):
     detectedFrequenciesVsTimeBinary[i] = SNR > SNRTHRESHOLD # TRUE/FALSE values for every frequency if its present or not
     detectedFrequenciesVsTimeSNR[i] = np.where(SNR > SNRTHRESHOLD, SNR, 0) 
 
-    # TODO Freq arrival times
     # NOTE IRL Other sources of sound could produce the same freq thus multiple pulses at different frequencies and caluclated multipaths must be overlayed
     # A scatterplot of distance infomation should result in points being aggregated onto real obstacles; Filtering can occur at this level to remove random external sources
     # NOTE For futrue filtering make sure "counts" of detection are aligned, and make sure they strictly arrive after the pulse is sent, and the count right before the pulse is sent is reset so they all start from the same detection baseline; multiple counts after a pulse is indictive of either noise or multipathing
@@ -107,8 +106,10 @@ for i, t in enumerate(simulation_times):
                 # NOTE IRL Frequency isnt going to be perfect got to tune binning so that physical limits on sound production dont cause it to be spread over multiple max freq (EX 399, 400, 401) or however the bandwidth IRL works out
 print(detections)
 # TODO Corelate mics to get distance of point, Also Need to have pulse(freq) be within the sim part so we can use the pulse of the system to help filter noise on the recivers
-
+# TODO Ampltide of signals, not onyl if they are present is important; Waves could reflect back while the ping is being transmitted, multiplemultipath could arive at the same time
 colors = ["red", "green", "yellow", "purple", "blue", "orange"]
+
+# NOTE Look into GCC-PHAT for time difference calculations (I may have already started on a similar track)
 
 figPulse = plt.figure("Pulse")
 sub = figPulse.add_subplot(2, 1, 1)
